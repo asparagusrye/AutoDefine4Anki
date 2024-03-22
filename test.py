@@ -1,8 +1,6 @@
-import spacy
-from spacy.lang.es.examples import sentences
+import stanza
 
-nlp = spacy.load("es_dep_news_trf")
-doc = nlp(sentences[0])
-print(doc.text)
-for token in doc:
-    print(token.text, token.pos_, token.dep_)
+nlp = stanza.Pipeline(lang="es", processors='tokenize,mwt,pos,lemma',
+                      download_method=stanza.DownloadMethod.REUSE_RESOURCES)
+doc = nlp('Este es un gato.')
+print(*[f'word: {word.text + " "}\tlemma: {word.lemma}' for sent in doc.sentences for word in sent.words], sep='\n')
