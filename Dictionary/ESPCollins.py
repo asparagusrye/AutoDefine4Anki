@@ -1,20 +1,21 @@
 """ Because Collins use CloudFlare, which prevents the use headless browser for
     scrapping. For Collins Dictionaries, selenium (headfull broswer) is used"""
 import traceback
-from typing import List
+from typing import Dict
 
+from bs4 import BeautifulSoup
 import selenium.common.exceptions
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from WordNotFound import WordNotFound
-import stanza
+from TextFormatingHTML import *
+import spacy
 
 
 class Word:
     """ retrieve word info from collins spanish dictionary website """
     word_entry: webdriver = None
-    nlp = stanza.Pipeline(lang="es", processors='tokenize,mwt,pos,lemma',
-                          download_method=stanza.DownloadMethod.REUSE_RESOURCES)
+
+    nlp = spacy.load("es_dep_news_trf")
 
     entry_selector = '.page > .dictionaries > .dictionary'
     header_selector = '.top-container'
@@ -24,34 +25,43 @@ class Word:
     definition_body_selector = ".definitions > .hom"
     pos_selector = ".gramGrp .pos"
 
+    skip_class_list = ["sensenum", "xr"]
+    space_after_class_list = ['type-syn', 'type-register', 'rend-b']
+    newline_after_class_list = ['gramGrp', 'type-subj', 'type-translation',
+                                'sense']
+
+    global_namespace = "__GLOBAL__"
+
     @classmethod
-    def get_url(cls, key_word):
+    def get_url(cls, key_word: str) -> str:
         # get url of word definition
         baseurl = "https://www.collinsdictionary.com/dictionary/spanish-english/"
         return baseurl + key_word
 
     @classmethod
-    def get(cls, key_word):
+    def get(cls, key_word: str) -> None:
         # get the web driver, go to the url of the word
         driver_options = webdriver.EdgeOptions()
         driver_options.add_argument('--blink-settings=imagesEnabled=false')
         # driver_options.add_experimental_option("detach", True)
-        browser = webdriver.Edge(options=driver_options)
-        browser.get(cls.get_url(key_word))
-        dictionaries = browser.find_elements(By.CSS_SELECTOR, cls.entry_selector)
+        driver = webdriver.Edge(options=driver_options)
+        driver.get(cls.get_url(key_word))
+        html = driver.page_source
+        soup = BeautifulSoup(html, features="html.parser")
+        dictionaries = soup.select(cls.entry_selector)
         if len(dictionaries) == 0:
             raise WordNotFound()
         cls.word_entry = dictionaries[0] if len(dictionaries) == 1 else dictionaries[1]
 
     @classmethod
-    def name(cls):
+    def name(cls) -> str:
         # get word name
         if cls.word_entry is None:
             return None
-        return cls.word_entry.find_element(By.CSS_SELECTOR, cls.title_selector).text
+        return cls.word_entry.select_one(cls.title_selector).get_text(strip=True)
 
     @classmethod
-    def pronunciations(cls):
+    def pronunciations(cls) -> List[Dict]:
         # get Lat Am and Spain pronunciations
 
         if cls.word_entry is None:
@@ -59,13 +69,12 @@ class Word:
 
         latam = {'prefix': None, 'mp3': None}
         spain = {'prefix': None, 'mp3': None}
-        elements = cls.word_entry.find_element(By.CSS_SELECTOR, cls.pronunciation_selector).find_elements(By.XPATH,
-                                                                                                          "./*")
+        elements = cls.word_entry.select_one(cls.pronunciation_selector).find_all(recursive=False)
         try:
-            latam['mp3'] = elements[0].find_element(By.TAG_NAME, "a").get_attribute("data-src-mp3")
-            latam['prefix'] = elements[1].text
-            spain['mp3'] = elements[2].find_element(By.TAG_NAME, "a").get_attribute("data-src-mp3")
-            spain['prefix'] = elements[3].text
+            latam['mp3'] = elements[0].select_one("a").attrs["data-src-mp3"]
+            latam['prefix'] = elements[1].get_text(strip=True)
+            spain['mp3'] = elements[2].select_one("a").attrs["data-src-mp3"]
+            spain['prefix'] = elements[3].get_text(strip=True)
         except IndexError:
             print("There was an error with indexing while reading pronunciation tags")
         except Exception as e:
@@ -73,79 +82,91 @@ class Word:
         return [latam, spain]
 
     @classmethod
-    def definitions(cls):
+    def definitions(cls) -> List:
+        def contain_class(classes_to_search: List[str], element_classes: List[str]) -> bool:
+            return any(element_class in element_classes for element_class in classes_to_search)
+
         word_definitions = []
 
         # Some words can be both feminine and masculine nouns. In the dictionary, the definition of the word
         # will be divided into several sections based on its part of speech. Therefore, we will use
         # the part of speech as the namespace of the word info.
-        namespaces = cls.word_entry.find_elements(By.CSS_SELECTOR, cls.definition_body_selector)
+        namespaces = cls.word_entry.select(cls.definition_body_selector)
 
         for namespace in namespaces:
             info_in_namespace = {}
             try:
-                pos = namespace.find_element(By.CSS_SELECTOR, cls.pos_selector).text
+                pos = namespace.select_one(cls.pos_selector).get_text(strip=True)
             except selenium.common.exceptions.NoSuchElementException:
                 # in the dictionary, some words don't have p.o.s. In this case, we'll name the namespace __GlOBAl__
-                pos = "__GLOBAL__"
+                pos = cls.global_namespace
             # use the the p.o.s of the word as the namespace
             info_in_namespace["namespace"] = pos
-
             info_in_namespace["definitions"] = []
 
-            senses_under_gramgrp = namespace.find_elements(By.CSS_SELECTOR, " .gramGrp > .sense")
+            senses_under_gramgrp = namespace.select(" .gramGrp > .sense")
             # in this case the .sense lie immediately under '.hom' not under .gramGrp
-            senses = senses_under_gramgrp if len(senses_under_gramgrp) != 0 else namespace.find_elements(
-                By.CSS_SELECTOR, ".hom > .sense")
+            senses = senses_under_gramgrp if len(senses_under_gramgrp) != 0 else namespace.select(".hom > .sense")
 
             for sense in senses:
                 definition_info = {}
                 definition = ""
                 examples = []
 
-                for sense_element in sense.find_elements(By.XPATH, "./*"):
-                    element_classes = sense_element.get_attribute("class").split(" ")
+                for sense_element in sense.find_all(recursive=False):
+                    element_classes = sense_element.attrs["class"]
+                    # skip sense numbering at the beginning of the definition
+                    if contain_class(cls.skip_class_list, element_classes):
+                        continue
                     # try to get the word definition (description)
-                    if any(element_class in element_classes for element_class in
-                           ['type-syn', 'gramGrp', 'type-subj', 'type-translation',
-                            'sense']) and 'xr' not in element_classes:
-                        definition += sense_element.text + "\n"
+                    if contain_class(cls.newline_after_class_list, element_classes):
+                        definition += sense_element.get_text(strip=True) + "\n"
 
+                    if contain_class(cls.space_after_class_list, element_classes):
+                        definition += sense_element.get_text(strip=True) + " "
+
+                    if "punctuation" in element_classes:
+                        if definition[-1] == "\n":
+                            definition = definition[:-1]
+                        if sense_element.text == "(":
+                            definition += " ("
+                        else:
+                            definition += ") "
+
+                    if 'bluebold' in element_classes:
+                        definition = definition[:-1]
+                        definition += f" {sense_element.get_text(strip=True)} "
                     # try to get the examples for that definition (description)
                     if "type-example" in element_classes:
-                        quote = sense_element.find_element(By.CSS_SELECTOR, ".type-example > .quote").text
-                        translation = sense_element.find_element(By.CSS_SELECTOR,
-                                                                 ".type-example >.type-translation").text
+                        quote = sense_element.select_one(".type-example > .quote").get_text(strip=True)
+                        translation = sense_element.select_one(".type-example >.type-translation").get_text(strip=True)
                         examples.append({"quote": quote, "translation": translation})
 
-                    if "type-phr" in element_classes:
-                        quote = sense_element.find_element(By.CSS_SELECTOR, ".type-phr > .type-phr").text
-                        translation = ""
-                        try:
-                            translation = sense_element.find_element(By.CSS_SELECTOR,
-                                                                     ".type-phr > .type-translation").text
-                        except:
-                            pass
-
+                    if contain_class(["type-phr", "type-idm"], element_classes):
+                        element_class = "type-phr" if "type-phr" in element_classes else "type-idm"
+                        quote = sense_element.select_one(f".{element_class} > .orth").get_text(strip=True)
+                        if type_syn := sense_element.select_one(f".{element_class} > .type-syn"):
+                            quote += " " + type_syn.get_text(strip=True)
+                        translation = sense_element.select_one(f".{element_class} > .type-translation").get_text(
+                            strip=True)
                         subdefintion = {"quote": quote, "translation": translation, "examples": []}
-                        subsexamples = sense_element.find_elements(By.CSS_SELECTOR, ".type-phr > .type-example")
-                        for subexample in subsexamples:
-                            subquote = sense_element.find_element(By.CSS_SELECTOR, ".type-example > .quote").text
-                            subtranslation = sense_element.find_element(By.CSS_SELECTOR,
-                                                                        ".type-example >.type-translation").text
+                        subexamples = sense_element.select(f".{element_class} > .type-example")
+                        for subexample in subexamples:
+                            subquote = subexample.select_one(".quote").get_text(strip=True)
+                            subtranslation = subexample.select_one(".type-translation").get_text(
+                                strip=True)
                             subdefintion["examples"].append({"quote": subquote, "translation": subtranslation})
-
                         examples.append(subdefintion)
 
-                definition_info['definition'] = definition
+                definition_info['definition'] = definition.strip(" \n")
                 definition_info['examples'] = examples
                 info_in_namespace['definitions'].append(definition_info)
             word_definitions.append(info_in_namespace)
-        # print(word_definitions)
+        print(word_definitions)
         return word_definitions
 
     @classmethod
-    def info(cls, replace_keyword=True):
+    def info(cls, replace_keyword: bool = True) -> Dict:
         word_info = {
             "name": cls.name(),
             "pronunciations": cls.pronunciations(),
@@ -156,48 +177,48 @@ class Word:
         return word_info
 
     @classmethod
-    def definitions_in_html(cls, key_word, definitions, replace_keyword=True, replacement="____"):
-        def bold(string):
-            return f'<b>{string}</b>'
+    def replace_word(cls, key_word: str, sentence: str, replacement: str = "____") -> str:
+        words_to_replace = []
+        for token in cls.nlp(sentence):
+            if token.lemma_ == key_word:
+                words_to_replace.append(token.text)
+        words_to_replace = sorted(list(set(words_to_replace)), key=len, reverse=True)
+        for word_to_replace in words_to_replace:
+            sentence = sentence.replace(word_to_replace, replacement)
+        return sentence
 
-        def italic(string):
-            return f'<i>{string}</b>'
-
-        def list_item(string):
-            return f'<li>{string}</li>'
-
-        def make_unordered_list(strings: List[str]) -> str:
-            return f'<ul>{"\n".join([string for string in strings])}</ul>'
-
-        def make_ordered_list(strings: List[str]) -> str:
-            return f'<ol>{"\n".join([string for string in strings])}</ol>'
-
-        definitions_in_html = definitions
-        for namespace in definitions_in_html:
+    @classmethod
+    def definitions_in_html(cls, key_word, definitions, replace_keyword=True):
+        html_content = []
+        for namespace in definitions:
+            html_namespace_content = div(italic(namespace["namespace"]))
             for definition_in_namespace in namespace["definitions"]:
-                definition_in_namespace["definition"] = bold(definition_in_namespace["definition"])
-                list_of_examples = []
+                html_namespace_content += div(bold(definition_in_namespace["definition"]))
+                html_examples = []
                 for example in definition_in_namespace["examples"]:
-                    if replace_keyword:
-                        words_to_replace = [key_word]
-                        doc = cls.nlp(example["quote"])
-                        for sentences in doc.sentences:
-                            for word in sentences.words:
-                                if word.lemma == key_word:
-                                    words_to_replace.append(word.text)
-                        words_to_replace = sorted(list(set(words_to_replace)), key=len)
-                        for word_to_replace in words_to_replace:
-                            example["quote"] = example["quote"].replace(word_to_replace, replacement)
-                    example["quote"] = italic(example["quote"])
-                    example["translation"] = bold(example["translation"])
-                    list_of_examples.append(list_item(f'{example["quote"]}: {example["translation"]}'))
-                make_ordered_list(list_of_examples)
+                    quote = cls.replace_word(key_word, example["quote"]) if replace_keyword else example["quote"]
+                    quote_html = bold(quote)
+                    translation_html = italic(example["translation"])
+                    html_examples.append(list_item(f"{quote_html}: {translation_html}"))
 
-        print(definitions_in_html)
-        return definitions
+                    if "examples" in example:
+                        html_subexamples = []
+                        for subexample in example["examples"]:
+                            subquote = cls.replace_word(key_word, subexample["quote"]) if replace_keyword else \
+                            subexample[
+                                "quote"]
+                            subquote_html = bold(subquote)
+                            subtranslation_html = italic(subexample["translation"])
+                            html_subexamples.append(list_item(f"{subquote_html}: {subtranslation_html}"))
+                        html_examples.append(make_unordered_list(html_subexamples))
+                html_namespace_content += make_ordered_list(html_examples)
+                html_content.append(html_namespace_content)
+        return str(BeautifulSoup("<hr>".join(html_content)).prettify())
 
 
 if __name__ == '__main__':
-    Word.get("poner")
-    Word.info()
-    list_of_lemmas = ['final', 'final', 'finales', 'final']
+    Word.get("final")
+    print(Word.name())
+    print(Word.pronunciations())
+    word = Word.info()
+    print(word["definitions_in_html"])
