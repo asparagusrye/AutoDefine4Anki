@@ -5,18 +5,19 @@ import traceback
 import selenium.common.exceptions
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from WordNotFound import WordNotFound
 
 
 class Word:
     """ retrieve word info from collins spanish dictionary website """
-    driver = None
+    word_entry = None
 
-    entry_selector = '.page > .dictionary'
+    entry_selector = '.page > .dictionaries > .dictionary'
     header_selector = '.top-container'
 
-    title_selector = entry_selector + ' .title_container .orth'
-    pronunciation_selector = entry_selector + " > .mini_h2"
-    definition_body_selector = entry_selector + " .definitions > .hom"
+    title_selector = ' .title_container .orth'
+    pronunciation_selector = " > .mini_h2"
+    definition_body_selector = " .definitions > .hom"
     pos_selector = " .gramGrp .pos"
 
     @classmethod
@@ -31,26 +32,31 @@ class Word:
         driver_options = webdriver.EdgeOptions()
         driver_options.add_argument('--blink-settings=imagesEnabled=false')
         # driver_options.add_experimental_option("detach", True)
-        cls.driver = webdriver.Edge(options=driver_options)
-        cls.driver.get(cls.get_url(word))
+        browser = webdriver.Edge(options=driver_options)
+        browser.get(cls.get_url(word))
+        dictionaries = browser.find_elements(By.CSS_SELECTOR, cls.entry_selector)
+        if len(dictionaries) == 0:
+            raise WordNotFound()
+        cls.word_entry = dictionaries[0] if len(dictionaries) == 1 else dictionaries[1]
+
 
     @classmethod
     def name(cls):
         # get word name
-        if cls.driver is None:
+        if cls.word_entry is None:
             return None
-        return cls.driver.find_element(By.CSS_SELECTOR, cls.title_selector).text
+        return cls.word_entry.find_element(By.CSS_SELECTOR, cls.title_selector).text
 
     @classmethod
     def pronunciations(cls):
         # get Lat Am and Spain pronunciations
 
-        if cls.driver is None:
+        if cls.word_entry is None:
             return None
 
         latam = {'prefix': None, 'mp3': None}
         spain = {'prefix': None, 'mp3': None}
-        elements = cls.driver.find_element(By.CSS_SELECTOR, cls.pronunciation_selector).find_elements(By.XPATH, "./*")
+        elements = cls.word_entry.find_element(By.CSS_SELECTOR, cls.pronunciation_selector).find_elements(By.XPATH, "./*")
         try:
             latam['mp3'] = elements[0].find_element(By.TAG_NAME, "a").get_attribute("data-src-mp3")
             latam['prefix'] = elements[1].text
@@ -69,7 +75,7 @@ class Word:
         # Some words can be both feminine and masculine nouns. In the dictionary, the definition of the word
         # will be divided into several sections based on its part of speech. Therefore, we will use
         # the part of speech as the namespace of the word info.
-        namespaces = cls.driver.find_elements(By.CSS_SELECTOR, cls.definition_body_selector)
+        namespaces = cls.word_entry.find_elements(By.CSS_SELECTOR, cls.definition_body_selector)
 
         for namespace in namespaces:
             info_in_namespace = {}
@@ -83,9 +89,9 @@ class Word:
 
             info_in_namespace["definitions"] = []
 
-            senses_under_gramGrp = namespace.find_elements(By.CSS_SELECTOR, " .gramGrp > .sense")
+            senses_under_gramgrp = namespace.find_elements(By.CSS_SELECTOR, " .gramGrp > .sense")
             # in this case the .sense lie immediately under '.hom' not under .gramGrp
-            definitions = senses_under_gramGrp if senses_under_gramGrp is not None else namespace.find_elements(
+            definitions = senses_under_gramgrp if senses_under_gramgrp is not None else namespace.find_elements(
                 By.CSS_SELECTOR, ".hom > .sense")
 
             for definition in definitions:
