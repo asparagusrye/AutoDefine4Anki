@@ -14,7 +14,7 @@ class AutoDefineModel:
         for keyword in keywords:
             Word.get(keyword)
             word_info = Word.info()
-            #TODO: Fix sometimes the word has only one pronunciation audio e.g. chava or doesn't have at all
+            # TODO: Fix sometimes the word has only one pronunciation audio e.g. chava or doesn't have at all
             pronunciation_url = ""
             try:
                 pronunciation_url = word_info["pronunciations"]["Spain"]

@@ -1,14 +1,7 @@
 from PyQt6.QtWidgets import (
-    QApplication,
-    QGridLayout,
-    QLineEdit,
     QMainWindow,
-    QPushButton,
     QVBoxLayout,
-    QWidget, QBoxLayout, QFormLayout, QTextEdit, QDialogButtonBox, QHBoxLayout, QLabel, QGroupBox,
-)
-
-import sys
+    QWidget, QTextEdit, QDialogButtonBox, QLabel, )
 
 
 class AutoDefineWindow(QMainWindow):

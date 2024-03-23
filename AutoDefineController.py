@@ -1,12 +1,5 @@
-import pathlib
-import sys
+from PyQt6.QtWidgets import QDialogButtonBox, QMessageBox
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
-from functools import partial
-from Dictionary.ESPCollins import Word
-from http import cookiejar
-import csv
 
 class AutoDefineController:
     def __init__(self, model, view):
@@ -14,8 +7,8 @@ class AutoDefineController:
         self._view = view
         self._connectSignalsAndSlots()
 
-    def handle_exit_click(self, window):
-        window.close()
+    def handle_exit_click(self):
+        self._view.close()
 
     def handle_save_click(self):
         try:
@@ -37,9 +30,7 @@ class AutoDefineController:
             msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)  # Only OK button
             msg_box.exec()
 
-
     def _connectSignalsAndSlots(self):
-        self._view.buttons.button(QDialogButtonBox.StandardButton.Close).clicked.connect(
-            partial(self.handle_exit_click, self._view))
+        self._view.buttons.button(QDialogButtonBox.StandardButton.Close).clicked.connect(self.handle_exit_click)
 
         self._view.buttons.button(QDialogButtonBox.StandardButton.Save).clicked.connect(self.handle_save_click)

@@ -1,7 +1,7 @@
 """ Because Collins use CloudFlare, which prevents the use headless browser for
     scrapping. For Collins Dictionaries, selenium (headfull broswer) is used"""
 import traceback
-from typing import Dict, Any
+from typing import Dict
 
 from bs4 import BeautifulSoup
 import selenium.common.exceptions
