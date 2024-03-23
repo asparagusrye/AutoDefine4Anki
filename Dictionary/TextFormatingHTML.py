@@ -22,8 +22,8 @@ def list_item(content: str) -> str:
 
 
 def make_unordered_list(contents: List[str]) -> str:
-    return place_between_tag("".join([content for content in contents]), "ul")
+    return place_between_tag("".join(contents), "ul")
 
 
 def make_ordered_list(contents: List[str]) -> str:
-    return place_between_tag("".join([content for content in contents]), "ol")
+    return place_between_tag("".join(contents), "ol")

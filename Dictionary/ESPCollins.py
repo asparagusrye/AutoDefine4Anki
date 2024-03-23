@@ -1,13 +1,13 @@
 """ Because Collins use CloudFlare, which prevents the use headless browser for
     scrapping. For Collins Dictionaries, selenium (headfull broswer) is used"""
 import traceback
-from typing import Dict
+from typing import Dict, Any
 
 from bs4 import BeautifulSoup
 import selenium.common.exceptions
 from selenium import webdriver
-from WordNotFound import WordNotFound
-from TextFormatingHTML import *
+from .WordNotFound import WordNotFound
+from .TextFormatingHTML import *
 import spacy
 
 
@@ -61,25 +61,22 @@ class Word:
         return cls.word_entry.select_one(cls.title_selector).get_text(strip=True)
 
     @classmethod
-    def pronunciations(cls) -> List[Dict]:
+    def pronunciations(cls) -> dict[str, str] | None:
         # get Lat Am and Spain pronunciations
 
         if cls.word_entry is None:
             return None
 
-        latam = {'prefix': None, 'mp3': None}
-        spain = {'prefix': None, 'mp3': None}
+        pronunciations_url = {}
         elements = cls.word_entry.select_one(cls.pronunciation_selector).find_all(recursive=False)
         try:
-            latam['mp3'] = elements[0].select_one("a").attrs["data-src-mp3"]
-            latam['prefix'] = elements[1].get_text(strip=True)
-            spain['mp3'] = elements[2].select_one("a").attrs["data-src-mp3"]
-            spain['prefix'] = elements[3].get_text(strip=True)
+            pronunciations_url[elements[1].get_text(strip=True)] = elements[0].select_one("a").attrs["data-src-mp3"]
+            pronunciations_url[elements[3].get_text(strip=True)] = elements[2].select_one("a").attrs["data-src-mp3"]
         except IndexError:
             print("There was an error with indexing while reading pronunciation tags")
         except Exception as e:
             print(traceback.print_exc())
-        return [latam, spain]
+        return pronunciations_url
 
     @classmethod
     def definitions(cls) -> List:
@@ -147,8 +144,9 @@ class Word:
                         quote = sense_element.select_one(f".{element_class} > .orth").get_text(strip=True)
                         if type_syn := sense_element.select_one(f".{element_class} > .type-syn"):
                             quote += " " + type_syn.get_text(strip=True)
-                        translation = sense_element.select_one(f".{element_class} > .type-translation").get_text(
-                            strip=True)
+                        translation = ""
+                        if element := sense_element.select_one(f".{element_class} > .type-translation"):
+                            translation = element.get_text(strip=True)
                         subdefintion = {"quote": quote, "translation": translation, "examples": []}
                         subexamples = sense_element.select(f".{element_class} > .type-example")
                         for subexample in subexamples:
@@ -162,7 +160,6 @@ class Word:
                 definition_info['examples'] = examples
                 info_in_namespace['definitions'].append(definition_info)
             word_definitions.append(info_in_namespace)
-        print(word_definitions)
         return word_definitions
 
     @classmethod
@@ -191,9 +188,14 @@ class Word:
     def definitions_in_html(cls, key_word, definitions, replace_keyword=True):
         html_content = []
         for namespace in definitions:
-            html_namespace_content = div(italic(namespace["namespace"]))
+            html_namespace = ""
+            if namespace["namespace"] != cls.global_namespace:
+                html_namespace += div(italic(namespace["namespace"].upper()))
+
+            html_definitions = []
             for definition_in_namespace in namespace["definitions"]:
-                html_namespace_content += div(bold(definition_in_namespace["definition"]))
+                # html_namespace_content += list_item(bold(definition_in_namespace["definition"]))
+                html_definitions.append(list_item(bold(definition_in_namespace["definition"])))
                 html_examples = []
                 for example in definition_in_namespace["examples"]:
                     quote = cls.replace_word(key_word, example["quote"]) if replace_keyword else example["quote"]
@@ -205,20 +207,18 @@ class Word:
                         html_subexamples = []
                         for subexample in example["examples"]:
                             subquote = cls.replace_word(key_word, subexample["quote"]) if replace_keyword else \
-                            subexample[
-                                "quote"]
+                                subexample[
+                                    "quote"]
                             subquote_html = bold(subquote)
                             subtranslation_html = italic(subexample["translation"])
                             html_subexamples.append(list_item(f"{subquote_html}: {subtranslation_html}"))
                         html_examples.append(make_unordered_list(html_subexamples))
-                html_namespace_content += make_ordered_list(html_examples)
-                html_content.append(html_namespace_content)
-        return str(BeautifulSoup("<hr>".join(html_content)).prettify())
+                html_definitions.append(make_unordered_list(html_examples))
+            html_content.append(html_namespace + make_ordered_list(html_definitions))
+        return str(BeautifulSoup("<hr>".join(html_content), "html.parser"))
 
 
 if __name__ == '__main__':
     Word.get("final")
-    print(Word.name())
-    print(Word.pronunciations())
     word = Word.info()
-    print(word["definitions_in_html"])
+    print(word)
