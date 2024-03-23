@@ -27,8 +27,7 @@ class Word:
 
     skip_class_list = ["sensenum", "xr"]
     space_after_class_list = ['type-syn', 'type-register', 'rend-b']
-    newline_after_class_list = ['gramGrp', 'type-subj', 'type-translation',
-                                'sense']
+    newline_after_class_list = ['gramGrp', 'type-subj', 'type-translation']
 
     global_namespace = "__GLOBAL__"
 
@@ -133,6 +132,14 @@ class Word:
                     if 'bluebold' in element_classes:
                         definition = definition[:-1]
                         definition += f" {sense_element.get_text(strip=True)} "
+
+                    if "sense" in element_classes:
+                        # TODO e.g. estar
+                        if sense_element.select(".sense > .sense"):
+                            pass
+                        else:
+                            definition += sense_element.get_text(strip=True) + " "
+
                     # try to get the examples for that definition (description)
                     if "type-example" in element_classes:
                         quote = sense_element.select_one(".type-example > .quote").get_text(strip=True)
@@ -219,6 +226,6 @@ class Word:
 
 
 if __name__ == '__main__':
-    Word.get("final")
+    Word.get("estar")
     word = Word.info()
     print(word)

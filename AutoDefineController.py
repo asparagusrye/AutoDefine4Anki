@@ -1,4 +1,5 @@
 from PyQt6.QtWidgets import QDialogButtonBox, QMessageBox
+from functools import partial
 
 
 class AutoDefineController:
@@ -7,8 +8,8 @@ class AutoDefineController:
         self._view = view
         self._connectSignalsAndSlots()
 
-    def handle_exit_click(self):
-        self._view.close()
+    def handle_exit_click(self, window):
+        window.close()
 
     def handle_save_click(self):
         try:
@@ -31,6 +32,7 @@ class AutoDefineController:
             msg_box.exec()
 
     def _connectSignalsAndSlots(self):
-        self._view.buttons.button(QDialogButtonBox.StandardButton.Close).clicked.connect(self.handle_exit_click)
+        self._view.buttons.button(QDialogButtonBox.StandardButton.Close).clicked.connect(
+            partial(self.handle_exit_click, self._view))
 
         self._view.buttons.button(QDialogButtonBox.StandardButton.Save).clicked.connect(self.handle_save_click)
