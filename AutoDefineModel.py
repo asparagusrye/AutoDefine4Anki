@@ -12,7 +12,7 @@ class AutoDefineModel:
         self.list_of_words.append([name, definitions, audio])
 
     def add_words(self, keywords: List[str]):
-        for keyword in keywords:
+        for keyword in list(set(keywords)):
             try:
                 Word.get(keyword)
                 word_info = Word.info()

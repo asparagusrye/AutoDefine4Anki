@@ -17,7 +17,7 @@ class Word:
 
     nlp = spacy.load("es_dep_news_trf")
 
-    entry_selector = '.page > .dictionaries > .dictionary'
+    entry_selector = '.page > .dictionaries > .dictentry'
     header_selector = '.top-container'
 
     title_selector = '.title_container .orth'
@@ -35,7 +35,7 @@ class Word:
     def get_url(cls, key_word: str) -> str:
         # get url of word definition
         baseurl = "https://www.collinsdictionary.com/dictionary/spanish-english/"
-        return baseurl + key_word
+        return baseurl + key_word.replace(" ", "-")
 
     @classmethod
     def get(cls, key_word: str) -> None:
@@ -62,7 +62,7 @@ class Word:
     @classmethod
     def pronunciations(cls) -> dict[str, str] | None:
         # get Lat Am and Spain pronunciations
-
+        #TODO: desgrabar
         if cls.word_entry is None:
             return None
 
@@ -135,7 +135,7 @@ class Word:
 
                     if "sense" in element_classes:
                         if len(sense_element.select(".type-example")) == 0:
-                            definition += sense_element.get_text(strip=True) + " "
+                            definition += sense_element.get_text(strip=True) + "\n"
                         else:
                             quote = ""
                             translation = ""
