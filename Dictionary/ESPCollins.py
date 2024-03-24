@@ -6,8 +6,8 @@ from typing import Dict
 from bs4 import BeautifulSoup
 import selenium.common.exceptions
 from selenium import webdriver
-from .WordNotFound import WordNotFound
-from .TextFormatingHTML import *
+from WordNotFound import WordNotFound
+from TextFormatingHTML import *
 import spacy
 
 
@@ -26,7 +26,7 @@ class Word:
     pos_selector = ".gramGrp .pos"
 
     skip_class_list = ["sensenum", "xr"]
-    space_after_class_list = ['type-syn', 'type-register', 'rend-b']
+    space_after_class_list = ['type-syn', 'type-register', 'rend-b', 'type-misc']
     newline_after_class_list = ['gramGrp', 'type-subj', 'type-translation']
 
     global_namespace = "__GLOBAL__"
@@ -134,11 +134,26 @@ class Word:
                         definition += f" {sense_element.get_text(strip=True)} "
 
                     if "sense" in element_classes:
-                        # TODO e.g. estar
-                        if sense_element.select(".sense > .sense"):
-                            pass
-                        else:
+                        if len(sense_element.select(".type-example")) == 0:
                             definition += sense_element.get_text(strip=True) + " "
+                        else:
+                            quote = ""
+                            translation = ""
+                            subexamples = []
+                            for element in sense_element.find_all(recursive=False):
+                                if "type-example" in element.attrs["class"]:
+                                    subquote = element.select_one(".quote").get_text(strip=True)
+                                    subtranslation = element.select_one(".type-translation").get_text(
+                                        strip=True)
+                                    subexamples.append({"quote": subquote, "translation": subtranslation})
+                                elif "type-translation" in element.attrs["class"]:
+                                    translation = element.get_text(strip=True)
+                                elif "bold_blue" in element.attrs["class"]:
+                                    continue
+                                else:
+                                    quote += element.get_text(strip=True)
+                            subdefintion = {"quote": quote, "translation": translation, "examples": subexamples}
+                            examples.append(subdefintion)
 
                     # try to get the examples for that definition (description)
                     if "type-example" in element_classes:
