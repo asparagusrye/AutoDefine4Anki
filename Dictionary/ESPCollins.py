@@ -6,8 +6,8 @@ from typing import Dict
 from bs4 import BeautifulSoup
 import selenium.common.exceptions
 from selenium import webdriver
-from WordNotFound import WordNotFound
-from TextFormatingHTML import *
+from .WordNotFound import WordNotFound
+from .TextFormatingHTML import *
 import spacy
 
 
